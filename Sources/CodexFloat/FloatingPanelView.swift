@@ -301,6 +301,7 @@ struct FloatingPanelView: View {
   let onOpenSettings: () -> Void
   let onHide: () -> Void
   let onPreferredExpandedHeightChanged: (CGFloat) -> Void
+  var onToggleExpansion: () -> Void = {}
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var feedbackBannerHeight: CGFloat = 0
 
@@ -520,7 +521,7 @@ struct FloatingPanelView: View {
           alignment: .center
         )
     } else {
-      collapsedContent
+      standardCollapsedControl
         .padding(
           EdgeInsets(
             top: FloatingPanelLayout.collapsedVerticalPadding,
@@ -534,6 +535,27 @@ struct FloatingPanelView: View {
           height: FloatingPanelLayout.collapsedHeight,
           alignment: .topLeading
         )
+    }
+  }
+
+  @ViewBuilder private var standardCollapsedControl: some View {
+    if settings.clickExpansionEnabled {
+      Button(action: onToggleExpansion) {
+        collapsedContent
+          .allowsHitTesting(false)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(strings.text(.expandDetails))
+      .help(strings.text(.expandDetails))
+      .highPriorityGesture(
+        DragGesture(minimumDistance: 3, coordinateSpace: .global)
+          .onChanged { onMinimalDragChanged($0.translation, false) }
+          .onEnded { onMinimalDragChanged($0.translation, true) }
+      )
+    } else {
+      collapsedContent
     }
   }
 
@@ -679,13 +701,19 @@ struct FloatingPanelView: View {
     )
     .contentShape(Rectangle())
     .onTapGesture {
-      if model.quotaRecovery != nil { model.handleQuotaRecovery() }
+      if settings.clickExpansionEnabled {
+        onToggleExpansion()
+      } else if model.quotaRecovery != nil {
+        model.handleQuotaRecovery()
+      }
     }
-    .accessibilityAction(named: Text(strings.text(.openCodexUsage))) {
-      model.handleQuotaRecovery()
+    .accessibilityAction(named: Text(strings.text(settings.clickExpansionEnabled ? .expandDetails : .openCodexUsage))) {
+      if settings.clickExpansionEnabled { onToggleExpansion() }
+      else { model.handleQuotaRecovery() }
     }
     .help(
-      model.quotaRecovery.map { $0.message(strings) + " " + $0.actionTitle(strings) }
+      settings.clickExpansionEnabled ? strings.text(.expandDetails)
+        : model.quotaRecovery.map { $0.message(strings) + " " + $0.actionTitle(strings) }
         ?? strings.text(.minimalCollapsedHelp)
     )
     .highPriorityGesture(
@@ -787,9 +815,15 @@ struct FloatingPanelView: View {
       iconButton("gearshape", action: onOpenSettings)
         .accessibilityLabel(strings.text(.settings))
         .help(strings.text(.settings))
-      iconButton("eye.slash", action: onHide)
-        .accessibilityLabel(strings.text(.hide))
-        .help(strings.text(.hideHelp))
+      if settings.clickExpansionEnabled && settings.quotaDisplayMode != .menuBar {
+        iconButton("chevron.up", action: onToggleExpansion)
+          .accessibilityLabel(strings.text(.collapseDetails))
+          .help(strings.text(.collapseDetails))
+      } else {
+        iconButton("eye.slash", action: onHide)
+          .accessibilityLabel(strings.text(.hide))
+          .help(strings.text(.hideHelp))
+      }
     }
   }
 

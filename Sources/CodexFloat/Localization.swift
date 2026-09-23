@@ -28,6 +28,7 @@ enum LocalizedTextKey: String, CaseIterable {
   case quotaExhaustedAlert, remainingPercentage
   case language, languageDescription, unknown
   case windowSection, displayMode, standardDisplayMode, minimalDisplayMode, menuBarDisplayMode
+  case clickExpand, clickExpandHelp, expandDetails, collapseDetails
   case minimalCollapsedHelp, menuBarDisplayHelp, hoverExpand, collapseAfterMouseLeaves, immediately
   case minimalAppearance, minimalStyle, minimalVertical, minimalHorizontal, minimalRing
   case minimalLength, minimalHeight, minimalDiameter, minimalThickness, minimalScale,
@@ -574,6 +575,14 @@ struct AppStrings: Sendable {
       "顯示在 macOS 右側系統狀態列，由系統自動避開應用程式選單；懸停自動展開完整懸浮視窗，移開後收起，右鍵開啟功能選單。",
       "Shown as a native item on the right side of the macOS menu bar, where the system keeps it clear of app menus. Hover to reveal the full window; it closes after you move away. Right-click for the action menu."
     ),
+    .clickExpand: ("仅点击展开", "僅點擊展開", "Expand only on click"),
+    .clickExpandHelp: (
+      "鼠标经过时不展开；点击额度组件查看详情，鼠标移开后按设定延迟自动收起。也可点击右上角立即收起。",
+      "滑鼠經過時不展開；點擊額度元件查看詳情，滑鼠移開後依設定延遲自動收起。也可點擊右上角立即收起。",
+      "Hovering does not open details. Click the quota widget to expand; moving away collapses it after the selected delay. Use the top-right control to close it immediately."
+    ),
+    .expandDetails: ("展开详情", "展開詳情", "Expand details"),
+    .collapseDetails: ("收起详情", "收起詳情", "Collapse details"),
     .hoverExpand: ("鼠标移入时自动展开", "滑鼠移入時自動展開", "Expand when pointer hovers"),
     .collapseAfterMouseLeaves: ("鼠标移出后收起", "滑鼠移出後收起", "Collapse after pointer leaves"),
     .immediately: ("立即", "立即", "Immediately"),

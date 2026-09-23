@@ -167,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         in: button
       )
     } else {
-      if model?.quotaRecovery != nil {
+      if model?.settings.clickExpansionEnabled != true, model?.quotaRecovery != nil {
         model?.handleQuotaRecovery()
       } else {
         togglePanel()
@@ -186,7 +186,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     guard model?.settings.quotaDisplayMode == .menuBar else { return }
     pointerInsideStatusItem = isHovering
     if isHovering {
-      showMenuBarDetails()
+      menuBarHoverHideTask?.cancel()
+      if model?.settings.clickExpansionEnabled != true { showMenuBarDetails() }
     } else {
       scheduleMenuBarDetailHide()
     }
@@ -606,6 +607,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func presentCurrentFeedbackIfNeeded() {
     guard let model,
+      !model.settings.clickExpansionEnabled,
       model.settings.quotaDisplayMode == .menuBar,
       let anchor = statusItem?.button,
       statusItem?.isVisible == true,

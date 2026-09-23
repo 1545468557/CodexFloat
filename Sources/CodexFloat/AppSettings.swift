@@ -26,6 +26,7 @@ final class AppSettings: ObservableObject {
     static let showResetProbability = "showResetProbability"
     static let quotaDisplayMode = "collapsedDisplayStyle"
     static let minimalMeterAppearance = "minimalMeterAppearanceV1"
+    static let clickExpansionEnabled = "clickExpansionEnabled"
     static let hoverExpansionEnabled = "hoverExpansionEnabled"
     static let hoverCollapseDelay = "hoverCollapseDelay"
     static let showPanelOnLaunch = "showPanelOnLaunch"
@@ -113,6 +114,11 @@ final class AppSettings: ObservableObject {
       onDisplayModeChange?()
     }
   }
+  @Published var clickExpansionEnabled: Bool {
+    didSet { defaults.set(clickExpansionEnabled, forKey: Key.clickExpansionEnabled) }
+  }
+  var usesCompactPresentation: Bool { clickExpansionEnabled || hoverExpansionEnabled }
+
   @Published var hoverExpansionEnabled: Bool {
     didSet { defaults.set(hoverExpansionEnabled, forKey: Key.hoverExpansionEnabled) }
   }
@@ -228,6 +234,7 @@ final class AppSettings: ObservableObject {
       Key.feedEnabled: true,
       Key.showResetProbability: true,
       Key.quotaDisplayMode: QuotaDisplayMode.standard.rawValue,
+      Key.clickExpansionEnabled: false,
       Key.hoverExpansionEnabled: true,
       Key.hoverCollapseDelay: 0.6,
       Key.showPanelOnLaunch: true,
@@ -264,6 +271,7 @@ final class AppSettings: ObservableObject {
       defaults.data(forKey: Key.minimalMeterAppearance)
       .flatMap { try? JSONDecoder().decode(MinimalMeterAppearance.self, from: $0) }?
       .normalized ?? MinimalMeterAppearance()
+    clickExpansionEnabled = defaults.bool(forKey: Key.clickExpansionEnabled)
     hoverExpansionEnabled = defaults.bool(forKey: Key.hoverExpansionEnabled)
     hoverCollapseDelay = defaults.double(forKey: Key.hoverCollapseDelay)
     showPanelOnLaunch = defaults.bool(forKey: Key.showPanelOnLaunch)

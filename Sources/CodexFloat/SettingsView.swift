@@ -40,8 +40,9 @@ struct SettingsView: View {
           )
           .frame(width: 356)
         }
+        Toggle(strings.text(.clickExpand), isOn: $settings.clickExpansionEnabled)
         Toggle(strings.text(.hoverExpand), isOn: $settings.hoverExpansionEnabled)
-          .disabled(settings.quotaDisplayMode != .standard)
+          .disabled(settings.quotaDisplayMode != .standard || settings.clickExpansionEnabled)
         HStack {
           Text(strings.text(.collapseAfterMouseLeaves))
           Spacer()
@@ -54,7 +55,7 @@ struct SettingsView: View {
           .labelsHidden()
           .frame(width: 120)
         }
-        .disabled(!settings.hoverExpansionEnabled || settings.quotaDisplayMode == .menuBar)
+        .disabled(!settings.usesCompactPresentation && settings.quotaDisplayMode != .menuBar)
         Toggle(strings.text(.showOnLaunch), isOn: $settings.showPanelOnLaunch)
         if settings.quotaDisplayMode != .menuBar {
           Toggle(strings.text(.followCodexWindow), isOn: $settings.followCodexWindow)
@@ -67,7 +68,11 @@ struct SettingsView: View {
           isOn: $settings.showOnlyWhenChatGPTIsFrontmost
         )
         .disabled(settings.quotaDisplayMode == .menuBar)
-        if settings.quotaDisplayMode == .standard {
+        if settings.clickExpansionEnabled {
+          Text(strings.text(.clickExpandHelp))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else if settings.quotaDisplayMode == .standard {
           Text(
             settings.hoverExpansionEnabled
               ? strings.text(.hoverEnabledHelp) : strings.text(.hoverDisabledHelp)

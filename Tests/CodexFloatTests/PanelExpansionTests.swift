@@ -449,3 +449,53 @@ func edgePixels(_ image: CGImage) throws -> Data {
   #expect(controller.panel.frame == compact)
   try await body(controller, settings, defaults, placement, model)
 }
+
+extension FloatingPanelLayoutTests {
+  @Test @MainActor func clickOnlyExpansionIgnoresHoverAndPersistsAcrossRelaunch() async throws {
+    for mode in [QuotaDisplayMode.standard, .minimal] {
+      try await withEdgePanelFixture(mode: mode) { controller, settings, defaults, placement, model in
+        settings.hoverExpansionEnabled = false
+        settings.clickExpansionEnabled = true
+        try await Task.sleep(for: .milliseconds(80))
+        let compact = controller.compactAnchorFrame
+        controller.handleHover(true)
+        try await Task.sleep(for: .milliseconds(450))
+        #expect(defaults.bool(forKey: "panelCollapsed"))
+        #expect(controller.panel.frame == compact)
+
+        controller.handleExpansionClick()
+        try await assertEdgeTransition(controller, compact: compact)
+        #expect(!defaults.bool(forKey: "panelCollapsed"))
+        #expect(controller.panel.frame.height > compact.height)
+        settings.hoverCollapseDelay = 0.15
+        controller.handleHover(false)
+        try await Task.sleep(for: .milliseconds(50))
+        controller.handleHover(true)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(!defaults.bool(forKey: "panelCollapsed"))
+
+        controller.handleHover(false)
+        try await Task.sleep(for: .milliseconds(250))
+        try await assertEdgeTransition(controller, compact: compact)
+        #expect(defaults.bool(forKey: "panelCollapsed"))
+        controller.handleHover(true)
+        #expect(defaults.bool(forKey: "panelCollapsed"))
+        #expect(controller.panel.frame == compact)
+        #expect(AppSettings(defaults: defaults).clickExpansionEnabled)
+
+        controller.hide()
+        let relaunched = FloatingPanelController(
+          model: model, placement: placement, panelStateDefaults: defaults,
+          reduceMotionProvider: { true })
+        relaunched.show()
+        defer { relaunched.hide() }
+        relaunched.handleHover(true)
+        #expect(defaults.bool(forKey: "panelCollapsed"))
+        relaunched.handleExpansionClick()
+        #expect(!defaults.bool(forKey: "panelCollapsed"))
+        relaunched.handleExpansionClick()
+        #expect(defaults.bool(forKey: "panelCollapsed"))
+      }
+    }
+  }
+}

@@ -112,6 +112,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
   private var preferredExpandedHeight = Size.expanded.height
   private var collapseTask: Task<Void, Never>?
   private var hoverSettingSubscription: AnyCancellable?
+  private var clickSettingSubscription: AnyCancellable?
   private var displayModeSubscription: AnyCancellable?
   private var minimalAppearanceSubscription: AnyCancellable?
   private var windowFollowingSubscription: AnyCancellable?
@@ -167,7 +168,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     activePlacementMode = model.settings.quotaDisplayMode
     state = PanelUIState(
       defaults: panelStateDefaults,
-      initiallyCollapsed: model.settings.hoverExpansionEnabled
+      initiallyCollapsed: model.settings.usesCompactPresentation
     )
     panel = FloatingPanel(
       contentRect: NSRect(origin: .zero, size: Size.expanded),
@@ -210,7 +211,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
       onHide: { [weak self] in self?.onRequestHide?() },
       onPreferredExpandedHeightChanged: { [weak self] height in
         self?.applyPreferredExpandedHeight(height)
-      }
+      },
+      onToggleExpansion: { [weak self] in self?.handleExpansionClick() }
     )
     let hosting = FloatingPanelHostingView(rootView: root)
     // The controller owns the window frame. NSHostingView's default sizing
@@ -245,7 +247,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     state.expandedCanvasSize = expandedSize
     if state.isCollapsed {
       panel.styleMask.remove(.resizable)
-      if model.settings.quotaDisplayMode == .minimal {
+      if model.settings.quotaDisplayMode == .minimal || model.settings.clickExpansionEnabled {
         panel.isMovableByWindowBackground = false
       }
       var frame = panel.frame
@@ -263,6 +265,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     hoverSettingSubscription = model.settings.$hoverExpansionEnabled.dropFirst().sink {
       [weak self] isEnabled in
       Task { @MainActor [weak self] in self?.applyHoverMode(isEnabled) }
+    }
+    clickSettingSubscription = model.settings.$clickExpansionEnabled.dropFirst().sink {
+      [weak self] _ in
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        self.applyHoverMode(self.model.settings.hoverExpansionEnabled)
+      }
     }
     displayModeSubscription = model.settings.$quotaDisplayMode.dropFirst().sink {
       [weak self] _ in
@@ -305,11 +314,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
   func show(expanded: Bool = false) {
     menuBarPresentationTask?.cancel()
     menuBarPresentationTask = nil
-    if model.transientFeedback != nil, model.settings.quotaDisplayMode != .menuBar {
+    if model.transientFeedback != nil, !model.settings.clickExpansionEnabled,
+      model.settings.quotaDisplayMode != .menuBar {
       setCollapsed(false, animated: false)
     } else if expanded {
       setCollapsed(false, animated: false)
-    } else if model.settings.hoverExpansionEnabled, !pointerIsInsidePanel {
+    } else if model.settings.clickExpansionEnabled
+      || (model.settings.hoverExpansionEnabled && !pointerIsInsidePanel) {
       setCollapsed(true, animated: false)
     }
     ensureVisible()
@@ -382,16 +393,27 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     panel.isVisible ? hide() : show()
   }
 
+  func handleExpansionClick() {
+    guard model.settings.clickExpansionEnabled, !isHiddenForCodexMovement,
+      !isDraggingMinimalBar, model.settings.quotaDisplayMode != .menuBar else { return }
+    collapseTask?.cancel()
+    setCollapsed(!state.isCollapsed)
+  }
+
   func handleHover(_ isHovering: Bool) {
     guard !isHiddenForCodexMovement else { return }
     if model.settings.quotaDisplayMode == .menuBar {
       onMenuBarHoverChanged?(isHovering)
       return
     }
-    guard model.settings.hoverExpansionEnabled else {
+    guard model.settings.usesCompactPresentation else {
       return
     }
     collapseTask?.cancel()
+    if model.settings.clickExpansionEnabled {
+      if !isHovering, !state.isCollapsed, !isDraggingMinimalBar { scheduleCollapse() }
+      return
+    }
     if isHovering {
       guard !isDraggingMinimalBar else { return }
       if model.settings.quotaDisplayMode == .minimal, state.isCollapsed {
@@ -410,6 +432,11 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
   private func applyHoverMode(_ isEnabled: Bool) {
     collapseTask?.cancel()
     guard model.settings.quotaDisplayMode != .menuBar else { return }
+    if model.settings.clickExpansionEnabled {
+      panel.isMovableByWindowBackground = false
+      setCollapsed(true)
+      return
+    }
     if model.transientFeedback != nil {
       setCollapsed(false)
       return
@@ -423,7 +450,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
   private func scheduleCollapse() {
     collapseTask?.cancel()
-    guard model.transientFeedback == nil else { return }
+    guard model.settings.clickExpansionEnabled || model.transientFeedback == nil else { return }
     let delay = max(0.1, model.settings.hoverCollapseDelay)
     collapseTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .seconds(delay))
@@ -453,7 +480,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
       state.isCollapsing = shouldAnimate
       state.isCollapsed = true
       panel.styleMask.remove(.resizable)
-      if model.settings.quotaDisplayMode == .minimal {
+      if model.settings.quotaDisplayMode == .minimal || model.settings.clickExpansionEnabled {
         panel.isMovableByWindowBackground = false
       }
       let finalFrame = resolvedCollapsedRestingFrame()
@@ -531,7 +558,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
   var compactAnchorFrame: NSRect { resolvedCollapsedRestingFrame() }
 
   func handleMinimalDrag(translation: CGSize, ended: Bool) {
-    guard !isHiddenForCodexMovement, model.settings.quotaDisplayMode == .minimal,
+    guard !isHiddenForCodexMovement,
+      (model.settings.quotaDisplayMode == .minimal
+        || (model.settings.quotaDisplayMode == .standard && model.settings.clickExpansionEnabled)),
       state.isCollapsed,
       !state.isCollapsing
     else { return }
@@ -841,7 +870,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
     menuBarAnchorFrame = nil
     restoreFloatingPlacement(for: newMode)
-    let shouldCollapse = model.settings.hoverExpansionEnabled && model.transientFeedback == nil
+    let shouldCollapse = model.settings.clickExpansionEnabled
+      || (model.settings.hoverExpansionEnabled && model.transientFeedback == nil)
     state.isCollapsing = false
     state.isExpanding = false
     state.isCollapsed = shouldCollapse
@@ -851,7 +881,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
       animated: false
     )
     panel.isMovableByWindowBackground =
-      newMode == .standard || !shouldCollapse
+      (newMode == .standard && !model.settings.clickExpansionEnabled) || !shouldCollapse
     if shouldCollapse {
       panel.styleMask.remove(.resizable)
       let frame = targetFrame(for: collapsedSize)
@@ -862,13 +892,17 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
       resize(to: expandedSize, animated: false)
     }
     updateCodexWindow(codexWindow)
-    if model.transientFeedback != nil {
+    if model.transientFeedback != nil, !model.settings.clickExpansionEnabled {
       setCollapsed(false, animated: false)
       return
     }
   }
 
   private func applyFeedback(_ feedback: AppFeedback?) {
+    guard !model.settings.clickExpansionEnabled else {
+      feedbackPresentationIsActive = false
+      return
+    }
     if feedback != nil {
       if !feedbackPresentationIsActive {
         feedbackPresentationIsActive = true
